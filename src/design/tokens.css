@@ -1,0 +1,187 @@
+/*
+ * Evenly — design tokens (source of truth for the warm, editorial look).
+ *
+ * Light is the brand default and lives on :root, so every `--ev-*` token is
+ * always available no matter the active theme. Dark mode is provided by
+ * re-declaring only the *primitive* tokens (the rgb triples, the accent hexes,
+ * the line/shadow values) under `.ev-dark` / `[data-theme="evenly-dark"]`.
+ * The named alpha tokens are written once against `var(--ev-*-rgb)`, so they
+ * follow the cascade and flip automatically in dark — no duplication.
+ *
+ * Palette pulled hex-for-hex from the Evenly prototype:
+ *   paper #FBF7F0 · ink #3A352F · clay #E2725B (owes / primary) ·
+ *   sage #9CAF88 (owed) · honey #C79A4E (settled / even).
+ */
+
+:root {
+  /* ---- primitive rgb triples (everything alpha-composed derives from these) ---- */
+  --ev-ink-rgb: 58, 53, 47;          /* #3A352F */
+  --ev-paper-rgb: 251, 247, 240;     /* #FBF7F0 */
+  --ev-surface-rgb: 255, 253, 248;   /* #FFFDF8 */
+
+  /* ---- core surfaces ---- */
+  --ev-paper: #FBF7F0;        /* app background */
+  --ev-surface: #FFFDF8;      /* elevated cards, receipt, dock */
+  --ev-rail: #F4EEE4;         /* desktop left rail */
+  --ev-tile: #F4EEE3;         /* neutral activity icon tiles */
+  --ev-tile-warm: #F2E6D2;    /* receipt / featured icon tile */
+  --ev-tile-honey: #F6ECD6;   /* settled "we're square" big tile */
+  --ev-badge-bg: #F2E0D8;     /* RECEIPT pill background */
+
+  /* ---- ink (text) ---- */
+  --ev-ink: #3A352F;
+  --ev-ink-70: rgba(var(--ev-ink-rgb), 0.70);
+  --ev-ink-60: rgba(var(--ev-ink-rgb), 0.60);
+  --ev-ink-55: rgba(var(--ev-ink-rgb), 0.55);
+  --ev-ink-50: rgba(var(--ev-ink-rgb), 0.50);
+  --ev-ink-45: rgba(var(--ev-ink-rgb), 0.45);
+  --ev-ink-42: rgba(var(--ev-ink-rgb), 0.42);
+  --ev-ink-40: rgba(var(--ev-ink-rgb), 0.40);
+  --ev-ink-35: rgba(var(--ev-ink-rgb), 0.35);
+
+  /* ---- accents (semantic money colors) ---- */
+  --ev-clay: #E2725B;         /* primary / "owes" bar */
+  --ev-clay-deep: #B5563F;    /* "owes" text + receipt icon (on paper) */
+  --ev-sage: #9CAF88;         /* "owed" bar */
+  --ev-sage-deep: #6E8159;    /* "owed" text + hero owed */
+  --ev-honey: #C79A4E;        /* settled / even */
+
+  /* ---- hairlines, tracks & fills ---- */
+  --ev-line: rgba(var(--ev-ink-rgb), 0.07);        /* feed dividers */
+  --ev-line-soft: rgba(var(--ev-ink-rgb), 0.05);
+  --ev-line-strong: rgba(var(--ev-ink-rgb), 0.16); /* ladder center line */
+  --ev-track: rgba(var(--ev-ink-rgb), 0.05);       /* ladder track */
+  --ev-track-strong: rgba(var(--ev-ink-rgb), 0.07);/* match-dock track */
+  --ev-fill-ghost: rgba(var(--ev-ink-rgb), 0.045); /* secondary button fill */
+  --ev-fill-ghost-hover: rgba(var(--ev-ink-rgb), 0.08);
+  --ev-border-ghost: rgba(var(--ev-ink-rgb), 0.10);
+  --ev-dash: rgba(var(--ev-ink-rgb), 0.22);        /* dashed chip / receipt rule */
+  --ev-receipt-rule: rgba(var(--ev-ink-rgb), 0.20);
+
+  /* ---- radii ---- */
+  --ev-r-xs: 5px;
+  --ev-r-sm: 8px;
+  --ev-r-tile: 11px;
+  --ev-r-pill: 12px;
+  --ev-r-logo: 13px;
+  --ev-r-btn: 15px;
+  --ev-r-card: 16px;
+  --ev-r-dock: 18px;
+  --ev-r-xl: 20px;
+  --ev-r-round: 999px;
+
+  /* ---- shadows ---- */
+  --ev-shadow-btn: 0 1px 2px rgba(170, 72, 50, 0.30), 0 10px 22px -10px rgba(226, 114, 91, 0.70);
+  --ev-shadow-btn-lg: 0 12px 26px -10px rgba(226, 114, 91, 0.75);
+  --ev-shadow-logo: 0 6px 18px -6px rgba(226, 114, 91, 0.70);
+  --ev-shadow-soft: 0 1px 2px rgba(58, 40, 20, 0.05);
+  --ev-shadow-card: 0 1px 2px rgba(58, 40, 20, 0.05), 0 16px 34px -16px rgba(58, 40, 20, 0.40);
+  --ev-shadow-receipt: 0 1px 2px rgba(58, 40, 20, 0.05), 0 24px 50px -22px rgba(58, 40, 20, 0.35);
+
+  /* ---- type ---- */
+  --ev-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --ev-font-ui: 'Hanken Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ---- motion ---- */
+  --ev-ease-bar: cubic-bezier(0.22, 0.61, 0.36, 1); /* balance bar resolve */
+  --ev-ease-scan: cubic-bezier(0.5, 0, 0.5, 1);
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────────────
+ * A warm dark — not a cold gray. Paper becomes a deep roasted brown-black, ink
+ * a soft cream; the three money accents brighten just enough to hold contrast.
+ * Only primitives are re-declared; the alpha tokens above follow automatically.
+ */
+.ev-dark,
+[data-theme='evenly-dark'] {
+  color-scheme: dark;
+
+  --ev-ink-rgb: 237, 230, 218;       /* #EDE6DA cream */
+  --ev-paper-rgb: 26, 23, 20;        /* #1A1714 */
+  --ev-surface-rgb: 36, 32, 27;      /* #24201B */
+
+  --ev-paper: #1A1714;
+  --ev-surface: #24201B;
+  --ev-rail: #201C18;
+  --ev-tile: #2A2520;
+  --ev-tile-warm: #33271C;
+  --ev-tile-honey: #322A1C;
+  --ev-badge-bg: #3A2A22;
+
+  --ev-ink: #EDE6DA;
+
+  --ev-clay: #E2725B;
+  --ev-clay-deep: #EC9077;   /* lighter so "owes" text reads on dark paper */
+  --ev-sage: #9CAF88;
+  --ev-sage-deep: #AFC596;   /* lighter "owed" text */
+  --ev-honey: #D9B36A;
+
+  --ev-shadow-btn: 0 1px 2px rgba(0, 0, 0, 0.40), 0 10px 22px -10px rgba(226, 114, 91, 0.55);
+  --ev-shadow-btn-lg: 0 14px 30px -10px rgba(226, 114, 91, 0.60);
+  --ev-shadow-logo: 0 6px 18px -6px rgba(226, 114, 91, 0.55);
+  --ev-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --ev-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.40), 0 16px 34px -16px rgba(0, 0, 0, 0.70);
+  --ev-shadow-receipt: 0 1px 2px rgba(0, 0, 0, 0.40), 0 24px 50px -22px rgba(0, 0, 0, 0.65);
+}
+
+/* A scoped wrapper makes the dark tokens paint a real surface (used by the
+ * preview and any standalone dark region), not just expose variables. */
+.ev-dark {
+  background: var(--ev-paper);
+  color: var(--ev-ink);
+}
+
+/* ── shadcn token bridge ─────────────────────────────────────────────────────
+ * Map the scaffold's shadcn variables to Evenly so the leftover starter UI
+ * (components/ui/*) and the global <body> render warm when index.html selects
+ * `data-theme="evenly"`. The real design system uses the `--ev-*` tokens above;
+ * this bridge just keeps the rest of the app coherent.
+ */
+[data-theme='evenly'] {
+  color-scheme: light;
+  --color-background: #FBF7F0;
+  --color-foreground: #3A352F;
+  --color-card: #FFFDF8;
+  --color-card-foreground: #3A352F;
+  --color-popover: #FFFDF8;
+  --color-popover-foreground: #3A352F;
+  --color-primary: #E2725B;
+  --color-primary-foreground: #FBF7F0;
+  --color-secondary: #F4EEE4;
+  --color-secondary-foreground: #3A352F;
+  --color-muted: #F4EEE3;
+  --color-muted-foreground: rgba(58, 53, 47, 0.55);
+  --color-accent: #F2E6D2;
+  --color-accent-foreground: #3A352F;
+  --color-destructive: #B5563F;
+  --color-destructive-foreground: #FBF7F0;
+  --color-border: rgba(58, 53, 47, 0.08);
+  --color-input: rgba(58, 53, 47, 0.12);
+  --color-ring: #E2725B;
+  --shadow-card: 0 1px 2px rgba(58, 40, 20, 0.05);
+  --shadow-card-hover: 0 2px 10px -2px rgba(58, 40, 20, 0.12);
+}
+
+[data-theme='evenly-dark'] {
+  --color-background: #1A1714;
+  --color-foreground: #EDE6DA;
+  --color-card: #24201B;
+  --color-card-foreground: #EDE6DA;
+  --color-popover: #24201B;
+  --color-popover-foreground: #EDE6DA;
+  --color-primary: #E2725B;
+  --color-primary-foreground: #FBF7F0;
+  --color-secondary: #2A2520;
+  --color-secondary-foreground: #EDE6DA;
+  --color-muted: #2A2520;
+  --color-muted-foreground: rgba(237, 230, 218, 0.55);
+  --color-accent: #33271C;
+  --color-accent-foreground: #EDE6DA;
+  --color-destructive: #EC9077;
+  --color-destructive-foreground: #1A1714;
+  --color-border: rgba(237, 230, 218, 0.10);
+  --color-input: rgba(237, 230, 218, 0.14);
+  --color-ring: #E2725B;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 2px 10px -2px rgba(0, 0, 0, 0.5);
+}

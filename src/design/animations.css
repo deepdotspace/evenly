@@ -1,0 +1,56 @@
+/*
+ * Evenly — signature motion.
+ *
+ * Ported from the prototype's @keyframes. The one deliberate split: the
+ * prototype's single `evPop` baked `translate(-50%,-50%)` into the transform so
+ * it could centre an absolutely-positioned mark. That makes it unusable for an
+ * in-flow element (it would shift it half its own size). We keep both:
+ *   • evPop        — pure scale pop, for in-flow marks (the hero "All even" =).
+ *   • evPopCenter  — scale pop + centring, for absolutely centred ladder marks.
+ */
+
+@keyframes evScan {
+  0% { transform: translateY(-8px); }
+  100% { transform: translateY(300px); }
+}
+
+@keyframes evRise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes evPop {
+  0% { opacity: 0; transform: scale(0.3); }
+  60% { opacity: 1; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes evPopCenter {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes evPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+/* Convenience classes (components mostly set `animation` inline for exact
+ * delays, but these are handy for one-offs). */
+.ev-anim-rise { animation: evRise 0.5s both; }
+.ev-anim-pop { animation: evPop 0.5s both; }
+.ev-anim-pop-center { animation: evPopCenter 0.45s both; }
+.ev-anim-scan { animation: evScan 1.7s var(--ev-ease-scan) infinite; }
+.ev-anim-pulse { animation: evPulse 1s infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ev-anim-rise,
+  .ev-anim-pop,
+  .ev-anim-pop-center,
+  .ev-anim-scan,
+  .ev-anim-pulse,
+  [data-ev-anim] {
+    animation: none !important;
+  }
+}

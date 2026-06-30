@@ -1,0 +1,33 @@
+# --- dependencies & build output ---
+node_modules/
+dist
+.wrangler
+.worker-bundle.js
+*.tgz
+
+# --- secrets & local SDK state (never commit) ---
+.dev.vars
+.deepspace
+
+# --- build brain, internal research, specs, and design (internal, not shipped) ---
+docs/
+research/
+references/
+templates/
+
+# --- agent harness and internal directives (not shipped) ---
+.claude/
+.agents/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+
+# --- test artifacts ---
+test-results
+playwright-report
+
+# --- os / editor cruft ---
+.DS_Store
+
+# --- launch promo video (large binary, not source) ---
+*.mp4

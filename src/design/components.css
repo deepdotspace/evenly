@@ -1,0 +1,100 @@
+/*
+ * Evenly — component interaction layer.
+ *
+ * Inline styles handle the exact palette / shadow / radius values (so they stay
+ * faithful AND flip in dark mode via the CSS vars). The few things inline styles
+ * can't express — :hover, :active, :focus-visible, ::placeholder — live here.
+ * Everything is namespaced `ev-` so it never collides with the scaffold's
+ * shadcn classes.
+ */
+
+/* ---- buttons ---- */
+.ev-btn {
+  font-family: var(--ev-font-ui);
+  cursor: pointer;
+  transition: filter 0.18s ease, transform 0.12s ease, background 0.18s ease,
+    box-shadow 0.18s ease, opacity 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ev-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ev-paper), 0 0 0 4px var(--ev-clay);
+}
+.ev-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none !important;
+  transform: none !important;
+}
+.ev-btn-primary:hover { filter: brightness(1.04); }
+.ev-btn-primary:active { transform: translateY(1px); filter: brightness(0.98); }
+.ev-btn-ghost:hover { background: var(--ev-fill-ghost-hover); }
+.ev-btn-ghost:active { transform: translateY(1px); }
+
+/* ---- pressable faces / chips / pills ---- */
+.ev-pressable {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background 0.18s ease,
+    border-color 0.18s ease, color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ev-pressable:active { transform: scale(0.94); }
+.ev-pressable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ev-paper), 0 0 0 4px var(--ev-clay);
+}
+.ev-chip-inactive:hover { border-color: var(--ev-ink-40); color: var(--ev-ink-55); }
+
+/* ---- rows that open ---- */
+.ev-row-link { transition: background 0.16s ease; cursor: pointer; }
+.ev-row-link:hover { background: var(--ev-fill-ghost); }
+
+/* ---- pill tabs ---- */
+.ev-tab { transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease; cursor: pointer; }
+.ev-tab:hover:not([data-active='true']) { color: var(--ev-ink); }
+
+/* ---- inputs ---- */
+.ev-input {
+  font-family: var(--ev-font-ui);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.ev-input::placeholder { color: var(--ev-ink-40); }
+.ev-input:focus {
+  outline: none;
+  border-color: var(--ev-clay);
+  box-shadow: 0 0 0 3px rgba(226, 114, 91, 0.16);
+}
+
+/* ---- FAB ---- */
+.ev-fab-main { transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, filter 0.18s ease; }
+.ev-fab-main:hover { filter: brightness(1.04); }
+.ev-fab[data-open='true'] .ev-fab-main { transform: rotate(45deg); }
+.ev-fab-action {
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+.ev-fab[data-open='true'] .ev-fab-action {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* ---- overlay / sheet motion ---- */
+.ev-overlay { animation: evFade 0.22s ease both; }
+.ev-sheet { animation: evSheetUp 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.ev-modal { animation: evModalIn 0.24s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+
+@keyframes evFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes evSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes evModalIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+/* ---- toast ---- */
+.ev-toast { animation: evToastIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes evToastIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ev-overlay, .ev-sheet, .ev-modal, .ev-toast,
+  .ev-fab-action, .ev-fab-main { animation: none !important; transition: none !important; }
+}
