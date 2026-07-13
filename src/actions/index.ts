@@ -1,8 +1,9 @@
 import type { ActionHandler } from 'deepspace/worker'
-import { enqueueJob } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import { GROUP_SCOPED, LARGE_GROUP_ROW_THRESHOLD, queryAll } from './helpers'
-import { restampMemberIds } from './claim'
+import type { PaymentHandles } from '../lib/data/types'
+import { GROUP_SCOPED, isAdmin, loadGroup, queryAll } from './helpers'
+import { addMemberCore } from './membership'
+import { inviteActions } from './invite'
 import { groupActions } from './groups'
 import { expenseActions } from './expenses'
 import { commentActions } from './comments'
@@ -28,7 +29,10 @@ import { importActions } from './import'
  *   expenses.ts     addExpense, editExpense, softDeleteExpense, restoreExpense
  *   comments.ts     addComment
  *   settlements.ts  recordSettlement, deleteSettlement
- *   members.ts      removeMember, claimGuest, addContact
+ *   members.ts      removeMember, addContact
+ *   invite.ts       createInvite, resolveInvite, acceptInvite (shareable link flow;
+ *                   acceptInvite owns guest-claim, reusing claim.ts's runClaimGuest)
+ *   membership.ts   addMemberCore — the shared add-to-group fan-out (admin + invite)
  *   receipts.ts     scanReceipt (R2 image -> Anthropic vision -> reconcile)
  *   claim.ts        the guest -> userId rewrite (inline + Job-shared)
  */
@@ -57,67 +61,26 @@ const foundationActions: Record<string, ActionHandler<Env>> = {
       return { success: false, error: 'groupId and memberId are required' }
     }
 
-    const groupRes = await tools.get<GroupData>('groups', groupId)
-    if (!groupRes.success) return groupRes
-    const group = (groupRes.data as { record: Envelope<GroupData> }).record
-    const current = group.data.memberIds ?? []
-    const admins = group.data.adminIds ?? []
+    const g = await loadGroup(tools, groupId)
+    if (!g.ok) return { success: false, error: g.error }
 
-    // Authorization: only an admin/creator may add members (D8).
-    if (!admins.includes(userId) && group.createdBy !== userId) {
+    // Authorization: only an admin/creator may add members (D8). Adding an account
+    // leaks the whole group's rows to it over the WS, so it is a privileged change.
+    if (!isAdmin(g.record, userId)) {
       return { success: false, error: 'Forbidden: only a group admin may add members' }
     }
 
-    const nextMemberIds = current.includes(memberId)
-      ? current
-      : [...current, memberId]
-
-    // Re-stamp memberIds across every group-scoped row so the new member's
-    // canRead() filter matches the existing ledger. Do a bounded number of writes
-    // inline; if a large group has more rows than that, hand the remainder to a
-    // chunked, idempotent `restamp-member` Job so the fan-out never blows the Worker
-    // subrequest ceiling. Granting on the group row is additive, so the child rows
-    // streaming in via the Job is safe (the new member just sees them progressively).
-    if (!current.includes(memberId)) {
-      const res = await restampMemberIds(
-        tools,
-        { groupId, memberId, nextMemberIds },
-        { maxWrites: LARGE_GROUP_ROW_THRESHOLD },
-      )
-      await tools.update('groups', groupId, { memberIds: nextMemberIds })
-      if (!res.done) {
-        await enqueueJob(
-          env.JOB_ROOMS,
-          `app:${env.APP_NAME}`,
-          'restamp-member',
-          { groupId, memberId, nextMemberIds },
-          { maxAttempts: 3, enqueuedBy: userId },
-        )
-      }
-    }
-
-    // Ensure a groupMembers row exists for this member (query-then-create, footgun #7).
-    const existingRows = await queryAll<{ userId?: string; guestId?: string }>(tools, 'groupMembers', { groupId })
-    const isGuest = memberId.startsWith('guest:')
-    const alreadyHasRow = existingRows.some(
-      (r) => r.data.userId === memberId || r.data.guestId === memberId,
-    )
-    if (!alreadyHasRow) {
-      await tools.create('groupMembers', {
-        groupId,
-        memberIds: nextMemberIds,
-        userId: isGuest ? null : memberId,
-        guestId: isGuest ? memberId : null,
-        role: (params.role as string) ?? 'member',
-        status: 'active',
-        displayName: (params.displayName as string) ?? 'Member',
-        avatarUrl: (params.avatarUrl as string) ?? null,
-        paymentHandles: (params.paymentHandles as unknown) ?? null,
-        joinedAtMs: Date.now(),
-      })
-    }
-
-    return { success: true, data: { memberIds: nextMemberIds } }
+    const res = await addMemberCore(tools, env, {
+      groupId,
+      memberId,
+      role: (params.role as 'member' | 'admin') ?? 'member',
+      displayName: (params.displayName as string) ?? 'Member',
+      avatarUrl: (params.avatarUrl as string) ?? null,
+      paymentHandles: (params.paymentHandles as PaymentHandles | null) ?? null,
+      enqueuedBy: userId,
+    })
+    if (!res.ok) return { success: false, error: res.error }
+    return { success: true, data: { memberIds: res.memberIds } }
   },
 
   /**
@@ -154,6 +117,7 @@ const foundationActions: Record<string, ActionHandler<Env>> = {
 
 export const actions: Record<string, ActionHandler<Env>> = {
   ...foundationActions,
+  ...inviteActions,
   ...groupActions,
   ...expenseActions,
   ...commentActions,

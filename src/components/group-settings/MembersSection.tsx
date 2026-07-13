@@ -7,13 +7,14 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import type { RecordData } from 'deepspace'
-import { Avatar, Button, EV, MoneyText, PlusIcon, Sheet, formatMoney } from '../../design'
+import { Avatar, Button, EV, LinkIcon, MoneyText, PlusIcon, Sheet, formatMoney } from '../../design'
 import type { GroupMemberData, MemberId } from '../../lib/data/types'
 import { Card, Notice } from './kit'
 import { ShieldIcon } from './icons'
 import { AddMemberSheet } from './AddMemberSheet'
 import { RemoveMemberSheet, type SettleEdge } from './RemoveMemberSheet'
 import { updateGroup, type GroupSettingsData } from './api'
+import { InviteSheet } from '../invite'
 
 type MemberRec = RecordData<GroupMemberData>
 
@@ -45,6 +46,7 @@ export function MembersSection({
   onToast: (kind: 'success' | 'error', title: string, body?: string) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null)
   const [pendingRole, setPendingRole] = useState<string | null>(null)
 
@@ -169,9 +171,30 @@ export function MembersSection({
         })}
       </div>
 
+      {/* share invite link — any member can invite; the friend picks who they are */}
+      <Button
+        variant="secondary"
+        fullWidth
+        icon={<LinkIcon size={17} />}
+        onClick={() => setInviteOpen(true)}
+        style={{ marginTop: 14 }}
+      >
+        Share invite link
+      </Button>
+
       {!isAdmin && (
-        <Notice style={{ marginTop: 14 }}>Only an admin can add or remove members.</Notice>
+        <Notice style={{ marginTop: 14 }}>
+          Anyone with the invite link can join. Only an admin can add or remove members directly.
+        </Notice>
       )}
+
+      <InviteSheet
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        groupId={groupId}
+        groupName={group.name}
+        isAdmin={isAdmin}
+      />
 
       {/* add member */}
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add a member">

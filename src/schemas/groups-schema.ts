@@ -24,6 +24,12 @@ export const groupsSchema: CollectionSchema = {
     { name: 'coverImageKey', storage: 'text', interpretation: 'plain' },
     { name: 'archivedAt', storage: 'number', interpretation: 'plain' },
     { name: 'cachedNet', storage: 'text', interpretation: { kind: 'json' } },
+    // Group-level shareable-invite link (§1.5, invite-by-link). Minted/rotated only
+    // by the createInvite server action; consumed by resolveInvite / acceptInvite.
+    // Client stays write:false, and non-members never read it (read:'shared'), so the
+    // token only travels server-side (queried by value, RBAC-bypassed) — never leaked.
+    { name: 'inviteToken', storage: 'text', interpretation: 'plain' },
+    { name: 'inviteExpiresMs', storage: 'number', interpretation: 'plain' },
   ],
   // Writes locked off the client: createGroup / updateGroup / archiveGroup /
   // deleteGroupCascade server actions own every write (admin-gated, D8). A direct

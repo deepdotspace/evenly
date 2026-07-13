@@ -4,27 +4,17 @@
  *  - removeMember: admin-gated. Hard-remove is BLOCKED while the member's net != 0
  *    (settle first, A5); they may instead be marked `inactive` (kept in the ledger,
  *    can't be added to new expenses).
- *  - claimGuest: rewrite a `guest:<uuid>` to the caller's real userId across the
- *    group (idempotent). Inline for small groups; a `claim-guest` Job for large.
  *  - addContact: query-then-upsert the caller's address-book row (footgun #7).
+ *
+ * Self-service guest claiming lives in `invite.ts` (acceptInvite), authorized by the
+ * group's shareable invite token — it reuses the same `runClaimGuest` rewrite engine.
  */
 
 import type { ActionHandler } from 'deepspace/worker'
-import { enqueueJob } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import { netBalances } from '../lib/split'
-import type { ContactData, ExpenseData, GroupMemberData, SettlementData, UserProfileData } from '../lib/data/types'
-import {
-  fail,
-  isAdmin,
-  LARGE_GROUP_ROW_THRESHOLD,
-  loadGroup,
-  loadRecord,
-  logActivity,
-  ok,
-  queryAll,
-} from './helpers'
-import { estimateGroupRowCount, runClaimGuest, type ClaimIdentity } from './claim'
+import type { ContactData, ExpenseData, GroupMemberData, SettlementData } from '../lib/data/types'
+import { fail, isAdmin, loadGroup, logActivity, ok, queryAll } from './helpers'
 
 /** Net within this many minor units counts as settled (absorbs FX residue, T3). */
 const SETTLED_TOLERANCE = 1
@@ -82,76 +72,6 @@ export const removeMember: ActionHandler<Env> = async ({ userId, params, tools }
   return ok({ memberId, status: 'removed' })
 }
 
-export const claimGuest: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
-  const groupId = params.groupId as string
-  const guestId = params.guestId as string
-  if (!groupId || !guestId) return fail('groupId and guestId are required')
-  if (!guestId.startsWith('guest:')) return fail('guestId must be a guest identity')
-
-  const g = await loadGroup(tools, groupId)
-  if (!g.ok) return fail(g.error)
-
-  // Idempotent: already claimed.
-  if (!(g.record.data.memberIds ?? []).includes(guestId)) {
-    return ok({ groupId, guestId, userId, alreadyClaimed: true })
-  }
-
-  // Authorize: a valid, unexpired invite token issued for THIS guest. The claim
-  // binds the guest to the CALLER's own userId (from the verified JWT, below), and
-  // the token proves the caller is the invited person — so a co-member can no longer
-  // claim an arbitrary guest (and absorb that guest's balance) as themselves.
-  // NOTE: the server-issued, single-use tokenized invite (generated on invite, shown
-  // in the invite link, consumed here) is the full fix; this gate enforces its
-  // presence. There is no UI claim path today, so requiring the token breaks nothing.
-  const members = await queryAll<GroupMemberData>(tools, 'groupMembers', { groupId })
-  const guestRow = members.find((m) => m.data.guestId === guestId)
-  const token = params.inviteToken as string | undefined
-  const tokenValid =
-    !!guestRow?.data.inviteToken &&
-    !!token &&
-    guestRow.data.inviteToken === token &&
-    (!guestRow.data.inviteExpiresMs || guestRow.data.inviteExpiresMs > Date.now())
-  if (!tokenValid) {
-    return fail('Forbidden: a valid, unexpired invite token is required to claim this guest')
-  }
-
-  // Identity for the claimed member row -- params override the caller's profile.
-  const profileRes = await loadRecord<UserProfileData>(tools, 'users', userId)
-  const profile = profileRes.ok ? profileRes.record.data : null
-  const identity: ClaimIdentity = {
-    displayName: (params.displayName as string) ?? profile?.displayName ?? undefined,
-    avatarUrl: (params.avatarUrl as string | null | undefined) ?? profile?.avatarUrl ?? null,
-    paymentHandles: (params.paymentHandles as unknown) ?? profile?.paymentHandles ?? null,
-  }
-
-  // Large fan-out -> background Job (D5, subrequest ceiling).
-  const rowCount = await estimateGroupRowCount(tools, groupId)
-  if (rowCount > LARGE_GROUP_ROW_THRESHOLD) {
-    const jobId = await enqueueJob(
-      env.JOB_ROOMS,
-      `app:${env.APP_NAME}`,
-      'claim-guest',
-      { groupId, guestId, userId, identity },
-      { maxAttempts: 3, enqueuedBy: userId },
-    )
-    return ok({ groupId, guestId, userId, pending: true, jobId })
-  }
-
-  const result = await runClaimGuest(tools, { groupId, guestId, userId, identity })
-  if (result.error) return fail(result.error)
-
-  await logActivity(tools, {
-    groupId,
-    memberIds: result.noop ? g.record.data.memberIds : g.record.data.memberIds.map((id) => (id === guestId ? userId : id)),
-    type: 'member.added',
-    actorId: userId,
-    targetId: groupId,
-    payload: { summary: `${identity.displayName ?? 'A member'} joined and claimed their share` },
-  })
-
-  return ok({ groupId, guestId, userId, rewritten: result.rewritten })
-}
-
 export const addContact: ActionHandler<Env> = async ({ userId, params, tools }) => {
   const cachedName = (params.cachedName as string)?.trim()
   if (!cachedName) return fail('cachedName is required')
@@ -193,6 +113,5 @@ export const addContact: ActionHandler<Env> = async ({ userId, params, tools }) 
 
 export const memberActions: Record<string, ActionHandler<Env>> = {
   removeMember,
-  claimGuest,
   addContact,
 }

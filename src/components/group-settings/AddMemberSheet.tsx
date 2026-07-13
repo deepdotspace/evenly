@@ -5,8 +5,9 @@
  *   - add someone from the caller's contacts (a real user or saved guest).
  * A case-insensitive duplicate-name guard (A6) blocks accidental twins.
  *
- * Tokenized invite-by-email / link is DEFERRED (no issue-invite action exists in
- * this wave); the sheet says so honestly rather than faking a send.
+ * For self-service joining, the group's shareable invite link (Share invite link →
+ * InviteSheet, /join/:token) lets a friend claim a placeholder themselves; this
+ * sheet stays the admin path for seeding placeholders and adding known contacts.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -175,7 +176,10 @@ export function AddMemberSheet({
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <Notice>Invite by email or shareable link is coming soon.</Notice>
+      <Notice>
+        Want them to join and add their own expenses? Close this and use{' '}
+        <strong>Share invite link</strong>. They pick who they are and claim their spot.
+      </Notice>
     </div>
   )
 }

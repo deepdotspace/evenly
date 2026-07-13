@@ -23,6 +23,7 @@ export type Path =
   | `/app/settings`
   | `/design`
   | `/dev-spike`
+  | `/join/:token`
 
 export type Params = {
   '/*': { '*': string }
@@ -35,6 +36,7 @@ export type Params = {
   '/app/g/:groupId/scan': { groupId: string }
   '/app/g/:groupId/settings': { groupId: string }
   '/app/g/:groupId/settle': { groupId: string }
+  '/join/:token': { token: string }
 }
 
 export type ModalPath = never

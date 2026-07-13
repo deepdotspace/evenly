@@ -24,6 +24,7 @@ import {
   EV,
   EqualsMark,
   IconTile,
+  LinkIcon,
   MoneyText,
   OwesOwedLegend,
   ReceiptBadge,
@@ -36,6 +37,7 @@ import {
 } from '../../../../../design'
 import { useGroup, useGroupMembers, useExpenses, useSettlements } from '../../../../../hooks'
 import { ExportMenu } from '../../../../../components/export'
+import { InviteSheet } from '../../../../../components/invite'
 import {
   EVEN_TOLERANCE,
   buildBalanceLadder,
@@ -72,6 +74,7 @@ export default function GroupView() {
 
   const [query, setQuery] = useState('')
   const [simplify, setSimplify] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
   const simplifyInit = group.record ? truthy(group.record.data.simplifyDefault) : false
   // Seed the personal toggle from the group default once the group resolves.
   const [seeded, setSeeded] = useState(false)
@@ -184,6 +187,10 @@ export default function GroupView() {
   }
 
   const name = group.record?.data.name ?? 'Group'
+  const isAdmin =
+    !!group.record &&
+    !!userId &&
+    ((group.record.data.adminIds ?? []).includes(userId) || group.record.createdBy === userId)
 
   return (
     <div className="h-full lg:flex lg:min-h-0">
@@ -210,6 +217,16 @@ export default function GroupView() {
               </h1>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setInviteOpen(true)}
+                aria-label="Invite people"
+                title="Invite people"
+                className="ev-btn ev-btn-ghost inline-flex items-center justify-center"
+                style={{ width: 34, height: 34, borderRadius: 11 }}
+              >
+                <LinkIcon size={17} />
+              </button>
               <GroupQuickNav groupId={groupId} />
               <ExportMenu groupId={groupId} variant="icon" />
               {memberStack.length > 0 && (
@@ -420,6 +437,16 @@ export default function GroupView() {
           allSquare={edges.length === 0}
         />
       </aside>
+
+      {groupId && (
+        <InviteSheet
+          open={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          groupId={groupId}
+          groupName={name}
+          isAdmin={isAdmin}
+        />
+      )}
     </div>
   )
 }

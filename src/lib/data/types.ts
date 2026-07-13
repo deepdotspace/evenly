@@ -80,6 +80,10 @@ export interface GroupData {
   coverColor?: string | null
   archivedAt?: number | null
   cachedNet?: Record<MemberId, number> | null
+  /** Group-level shareable-invite link (invite-by-link). Server-only: minted by
+   *  the createInvite action, never client-written, never read by non-members. */
+  inviteToken?: string | null
+  inviteExpiresMs?: number | null
 }
 
 export type MemberRole = 'admin' | 'member'
