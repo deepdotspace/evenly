@@ -27,20 +27,28 @@ export const tasks: CronTask[] = [
   { name: 'recurring-materialize', schedule: '0 * * * *', timezone: 'UTC' },
 ]
 
+/**
+ * Runtime shape of a row returned by the cron `ctx.records` tools API
+ * (`{ recordId, data, createdAt, updatedAt }`, per deepspace/worker). The SDK
+ * types these reads as `unknown`, so this adapter asserts the documented shape
+ * at the boundary before handing rows to the typed `RecRecordIO` port.
+ */
+type CronRecordRow = { recordId: string; data: unknown }
+
 /** Adapt the cron context's record surface to the recurring materializer port. */
 function cronRecordIO(ctx: ReturnType<typeof buildCronContext>): RecRecordIO {
   return {
     async get(collection, recordId) {
-      const rows = await ctx.records.query(collection, {})
+      const rows = (await ctx.records.query(collection, {})) as CronRecordRow[]
       const rec = rows.find((r) => r.recordId === recordId)
       return rec ? { recordId: rec.recordId, data: rec.data as never } : null
     },
     async query(collection, where) {
-      const rows = await ctx.records.query(collection, where ? { where } : {})
+      const rows = (await ctx.records.query(collection, where ? { where } : {})) as CronRecordRow[]
       return rows.map((r) => ({ recordId: r.recordId, data: r.data as never }))
     },
     async create(collection, data) {
-      const res = await ctx.records.create(collection, data)
+      const res = (await ctx.records.create(collection, data)) as { recordId: string }
       return res.recordId
     },
     async update(collection, recordId, data) {
@@ -53,7 +61,8 @@ export async function runTask(name: string, env: Env): Promise<void> {
   const ctx = buildCronContext(env, env.OWNER_USER_ID, `app:${env.APP_NAME}`)
   if (name === 'fx-refresh') {
     await refreshFxRates({
-      query: (collection, opts) => ctx.records.query(collection, opts),
+      query: (collection, opts) =>
+        ctx.records.query(collection, opts) as Promise<Array<{ recordId: string }>>,
       create: (collection, data) => ctx.records.create(collection, data),
       update: (collection, recordId, data) => ctx.records.update(collection, recordId, data),
     })

@@ -36,6 +36,7 @@ bindings = [
 
 [vars]
 APP_NAME = "evenly"
+DEEPSPACE_APP_ID = "evenly"
 
 [dev]
 port = 8780
