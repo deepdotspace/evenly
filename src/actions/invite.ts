@@ -45,6 +45,7 @@ import {
   logActivity,
   ok,
   queryAll,
+  resolveDisplayName,
   type RecordEnvelope,
 } from './helpers'
 
@@ -189,9 +190,13 @@ export const acceptInvite: ActionHandler<Env> = async ({ userId, params, tools, 
     if (!guestRow || guestRow.data.status !== 'active') return fail('That spot is no longer available.')
     if (guestRow.data.userId) return fail('That spot has already been claimed by someone else.')
 
-    // Keep the placeholder's name unless the claimer has their own profile name.
+    // Keep the placeholder's human-picked name unless the claimer has a real
+    // identity of their own (a name they set, or the one the SDK holds). We do
+    // NOT fall through to the email handle here: a meaningful placeholder like
+    // "Priya" beats "heidi.serendipity" when the claimer never set a name.
+    const claimName = profile?.displayName?.trim() || profile?.name?.trim() || undefined
     const identity: ClaimIdentity = {
-      displayName: profile?.displayName || undefined,
+      displayName: claimName,
       avatarUrl: profile?.avatarUrl ?? null,
       paymentHandles: profile?.paymentHandles ?? null,
     }
@@ -233,7 +238,9 @@ export const acceptInvite: ActionHandler<Env> = async ({ userId, params, tools, 
   }
 
   /* --- join as a brand-new member ---------------------------------------- */
-  const displayName = profile?.displayName || 'Member'
+  // A new member with no set name still gets their real identity (SDK name /
+  // email handle), never the bare "Member" placeholder.
+  const displayName = resolveDisplayName(profile)
   const res = await addMemberCore(tools, env, {
     groupId,
     memberId: userId,

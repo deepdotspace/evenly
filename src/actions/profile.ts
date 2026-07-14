@@ -17,7 +17,7 @@ import type { ActionHandler, ActionTools } from 'deepspace/worker'
 import { enqueueJob } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { GroupMemberData, NotifyPrefs, PaymentHandles, UserProfileData } from '../lib/data/types'
-import { fail, LARGE_GROUP_ROW_THRESHOLD, loadRecord, ok, queryAll } from './helpers'
+import { fail, LARGE_GROUP_ROW_THRESHOLD, loadRecord, ok, queryAll, resolveDisplayName } from './helpers'
 
 /** ISO-4217 codes we offer in the picker -- guards against a junk default currency. */
 const CURRENCY_CODES = new Set([
@@ -189,6 +189,72 @@ export const updateProfile: ActionHandler<Env> = async ({ userId, params, tools,
   return ok({ userId, restamped, ...(pending ? { pending: true } : {}) })
 }
 
+/**
+ * Ensure the caller has a real display identity, and heal any membership rows
+ * that were persisted with a placeholder name.
+ *
+ * Called once per app session (client boot). It is the self-repair for the
+ * "You" / "Member" bug: earlier code seeded a member's `displayName` from the
+ * app's opt-in `users.displayName`, which is empty for anyone who never opened
+ * profile settings — so their rows fell back to a literal. Here we:
+ *   1. resolve their real name (set name -> SDK name -> client hint -> email),
+ *   2. seed `users.displayName` once if it was blank (so the profile screen and
+ *      every future join inherit it), and
+ *   3. re-stamp their existing membership rows to that name (idempotent — a
+ *      healthy user writes nothing; the big fan-out defers to the same
+ *      `restamp-identity` Job `updateProfile` uses).
+ *
+ * `params.name` is an OPTIONAL client hint (the SDK's fullName/firstName) used
+ * only when the server-side `users.name` is empty. Identity is never TAKEN from
+ * the client — the row is keyed to the verified `userId`, and the hint only ever
+ * supplies a friendlier fallback label, never authority.
+ */
+export const ensureIdentity: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  const hint = typeof params.name === 'string' ? params.name.trim() : ''
+  const existing = await loadRecord<UserProfileData>(tools, 'users', userId)
+  const profile = existing.ok ? existing.record.data : null
+
+  const resolved = resolveDisplayName({
+    displayName: profile?.displayName,
+    name: profile?.name || hint,
+    email: profile?.email,
+  })
+
+  // Seed the app's displayName once, so it stops being blank everywhere downstream.
+  const needsSeed = !profile?.displayName?.trim()
+  if (needsSeed) {
+    if (existing.ok) {
+      const upd = await tools.update('users', userId, { displayName: resolved })
+      if (!upd.success) return upd
+    } else {
+      const created = await tools.create('users', { createdAtMs: Date.now(), displayName: resolved }, userId)
+      if (!created.success) return created
+    }
+  }
+
+  // Repair persisted membership rows carrying a stale/placeholder name. Idempotent:
+  // rows already showing `resolved` are skipped, so a healthy user does 0 writes.
+  const res = await restampIdentity(
+    tools,
+    { userId, identityPatch: { displayName: resolved } },
+    { maxWrites: LARGE_GROUP_ROW_THRESHOLD },
+  )
+  let pending = false
+  if (!res.done) {
+    await enqueueJob(
+      env.JOB_ROOMS,
+      `app:${env.APP_NAME}`,
+      'restamp-identity',
+      { userId, identityPatch: { displayName: resolved } },
+      { maxAttempts: 3, enqueuedBy: userId },
+    )
+    pending = true
+  }
+
+  return ok({ displayName: resolved, seeded: needsSeed, restamped: res.written, ...(pending ? { pending: true } : {}) })
+}
+
 export const profileActions: Record<string, ActionHandler<Env>> = {
   updateProfile,
+  ensureIdentity,
 }

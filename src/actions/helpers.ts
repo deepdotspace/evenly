@@ -54,6 +54,38 @@ export function ok<T>(data: T): Ok<T> {
   return { success: true, data }
 }
 
+/* ---------------------------------------------------------------- identity */
+
+/** The identity fields we can read off a `users` row: the app's own opt-in
+ *  `displayName`, plus the SDK baseline `name` / `email` that `registerUser`
+ *  populates at connect. */
+export interface IdentityFields {
+  displayName?: string | null
+  name?: string | null
+  email?: string | null
+}
+
+/**
+ * The name to show for a real member, best-first: the name they set themselves,
+ * then the identity the SDK already holds (OAuth/display name), then the email
+ * local-part (e.g. `heidi.serendipity`), and only then a neutral last resort.
+ *
+ * This is the single source of truth for turning an account into a member label,
+ * so no code path ever persists a placeholder like "You"/"Member" for someone
+ * whose real identity was available the whole time (the account always has at
+ * least an email). Guest placeholders are named by whoever added them and never
+ * go through here.
+ */
+export function resolveDisplayName(id: IdentityFields | null | undefined): string {
+  const custom = id?.displayName?.trim()
+  if (custom) return custom
+  const name = id?.name?.trim()
+  if (name) return name
+  const local = id?.email?.trim().split('@')[0]?.trim()
+  if (local) return local
+  return 'Member'
+}
+
 /* --------------------------------------------------------------- record I/O */
 
 export type LoadResult<T> = { ok: true; record: RecordEnvelope<T> } | { ok: false; error: string }

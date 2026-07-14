@@ -26,3 +26,5 @@ export {
   type FxRatesState,
   type FxResolverState,
 } from './useFx'
+
+export { useEnsureIdentity } from './useEnsureIdentity'

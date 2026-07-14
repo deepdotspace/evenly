@@ -53,6 +53,11 @@ export interface UserProfileData {
   paymentHandles?: PaymentHandles | null
   notifyPrefs?: NotifyPrefs | null
   createdAtMs?: number
+  /** SDK baseline identity columns (USERS_COLUMNS), populated by `registerUser`
+   *  at connect. Read-only here; used as the fallback for `displayName` so a user
+   *  who never set a name still shows as a real person, not a placeholder. */
+  name?: string | null
+  email?: string | null
 }
 
 /** `contacts` address-book row (CONTRACT §1.4). */

@@ -16,6 +16,7 @@ import {
   loadRecord,
   logActivity,
   ok,
+  resolveDisplayName,
 } from './helpers'
 
 interface GuestSeed {
@@ -60,7 +61,7 @@ export const createGroup: ActionHandler<Env> = async ({ userId, params, tools })
     guestId: null,
     role: 'admin',
     status: 'active',
-    displayName: (params.creatorDisplayName as string) || profile?.displayName || 'You',
+    displayName: (params.creatorDisplayName as string)?.trim() || resolveDisplayName(profile),
     avatarUrl: (params.creatorAvatarUrl as string) ?? profile?.avatarUrl ?? null,
     paymentHandles: (params.creatorPaymentHandles as unknown) ?? profile?.paymentHandles ?? null,
     joinedAtMs: Date.now(),

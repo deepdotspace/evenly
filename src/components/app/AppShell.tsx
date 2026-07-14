@@ -24,7 +24,7 @@ import {
   MoneyText,
   formatMoney,
 } from '../../design'
-import { useProfile } from '../../hooks'
+import { useProfile, useEnsureIdentity } from '../../hooks'
 import { useAuth, useAuthUser } from 'deepspace'
 import { EVEN_TOLERANCE } from '../../lib/data'
 import { useGroupSummaries, type GroupSummary } from './shell-data'
@@ -42,6 +42,10 @@ export default function AppShell() {
   const { userId } = useAuth()
   const { user } = useAuthUser()
   const { record: profile } = useProfile()
+
+  // Seed the caller's display identity + heal any placeholder membership rows,
+  // once per session. Runs behind auth; no-op for a user already in good shape.
+  useEnsureIdentity()
 
   const displayName =
     profile?.data.displayName || user?.fullName || user?.firstName || 'You'

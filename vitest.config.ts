@@ -17,9 +17,10 @@ import { defineConfig } from 'vitest/config'
  */
 export default defineConfig({
   test: {
-    // Pure-logic unit suites (no DOM): the split/balance/fx engines and a few
-    // pure helpers co-located under src/components (e.g. activity day-grouping).
-    include: ['src/lib/**/*.test.ts', 'src/components/**/*.test.ts'],
+    // Pure-logic unit suites (no DOM): the split/balance/fx engines, a few pure
+    // helpers co-located under src/components (e.g. activity day-grouping), and
+    // pure server-action helpers (e.g. the identity resolver).
+    include: ['src/lib/**/*.test.ts', 'src/components/**/*.test.ts', 'src/actions/**/*.test.ts'],
     environment: 'node',
   },
 })
