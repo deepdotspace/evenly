@@ -16,7 +16,14 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { verifyJwt, apiWorkerFetch, platformWorkerFetch, authWorkerFetch } from 'deepspace/worker'
+import {
+  verifyJwt,
+  apiWorkerFetch,
+  platformWorkerFetch,
+  authWorkerFetch,
+  authenticatedRoomRequest,
+  resolveAppRole as sdkResolveAppRole,
+} from 'deepspace/worker'
 import type { JwtVerifierConfig, VerifyResult } from 'deepspace/worker'
 import { RecordRoom, YjsRoom, CanvasRoom, PresenceRoom, CronRoom, JobRoom } from 'deepspace/worker'
 import type { Job, JobContext, ActionTools, ActionResult, DOManifest, DOBindings } from 'deepspace/worker'
@@ -39,6 +46,36 @@ export const __DO_MANIFEST__ = [
   { binding: 'CRON_ROOMS', className: 'AppCronRoom', sqlite: true },
   { binding: 'JOB_ROOMS', className: 'AppJobRoom', sqlite: true },
 ] as const satisfies DOManifest
+
+// =============================================================================
+// Role resolution
+// =============================================================================
+
+/**
+ * Resolve a user's role from the app's canonical `users` collection.
+ *
+ * The SDK's resolveAppRole() addresses the RecordRoom as `app:${DEEPSPACE_APP_ID}`.
+ * Evenly's room — the single room holding every record, including the `users`
+ * rows this reads — is keyed `app:${APP_NAME}`: see SCOPE_ID in src/constants.ts,
+ * which is what the client mounts its RecordScope on, and every server-side stub
+ * in this file. Re-keying the room would orphan the live data, so hand the SDK
+ * helper the name the room is actually stored under. The role logic itself is
+ * the SDK's, unchanged.
+ *
+ * Every call site in this worker must go through this wrapper, never the raw
+ * SDK export — a call with the unadjusted env silently reads an empty room and
+ * returns 'viewer' for everyone but the owner.
+ */
+function resolveAppRole(env: Env, userId: string) {
+  return sdkResolveAppRole(
+    {
+      RECORD_ROOMS: env.RECORD_ROOMS,
+      DEEPSPACE_APP_ID: env.APP_NAME,
+      OWNER_USER_ID: env.OWNER_USER_ID,
+    },
+    userId,
+  )
+}
 
 // =============================================================================
 // Durable Objects — extend to customize behavior
@@ -84,7 +121,13 @@ export class AppCronRoom extends CronRoom<Env> {
  */
 export class AppJobRoom extends JobRoom<Env> {
   constructor(state: DurableObjectState, env: Env) {
-    super(state, env)
+    super(state, env, {
+      authorizeWrite: async (user) => {
+        if (user.userId.startsWith('anon-')) return false
+        const role = await resolveAppRole(env, user.userId)
+        return role === 'member' || role === 'admin'
+      },
+    })
   }
 
   protected async onJob(job: Job, ctx: JobContext): Promise<unknown> {
@@ -408,19 +451,23 @@ app.all('/api/integrations/:name/:endpoint', async (c) => {
 // WebSocket routes
 // ---------------------------------------------------------------------------
 
-// The DO reads identity (userId, userName, userEmail, userImageUrl, role)
-// off the URL it receives and trusts it. Anything the client put on the URL
-// is stripped on every code path; identity is re-applied only from a
-// verified JWT. Three states: no token = anonymous (the SDK's
-// allowAnonymous flow), invalid token = 401, valid token = JWT identity.
+// Identity crosses the worker -> DO hop in HTTP headers, never on the URL, and
+// the DO trusts what it is handed. authenticatedRoomRequest() strips `token`,
+// the five identity query params AND the five identity headers off the inbound
+// request before setting verified ones, so a client cannot spoof either channel.
+// Three states: no token = anonymous (the SDK's allowAnonymous flow), invalid
+// token = 401, valid token = JWT identity.
+//
+// This helper is the ONLY place in this worker that forwards identity to a room.
+// Any route that builds its own DO request bypasses the stripping above.
 function wsRoute(
   doNamespace: (env: Env) => DurableObjectNamespace,
-  extraParams?: (auth: VerifyResult) => Record<string, string>,
+  extraIdentity?: (auth: VerifyResult, env: Env) => { role?: string } | Promise<{ role?: string }>,
 ) {
   return async (c: any) => {
     const id = c.req.param('roomId') ?? c.req.param('docId') ?? c.req.param('scopeId')
-    const url = new URL(c.req.url)
-    const token = url.searchParams.get('token')
+    if (!id) return new Response('Not found', { status: 404 })
+    const token = new URL(c.req.url).searchParams.get('token')
 
     let auth: VerifyResult | null = null
     if (token) {
@@ -428,27 +475,14 @@ function wsRoute(
       if (!auth) return new Response('Unauthorized', { status: 401 })
     }
 
-    const doUrl = new URL(c.req.url)
-    doUrl.searchParams.delete('token')
-    for (const k of ['userId', 'userName', 'userEmail', 'userImageUrl', 'role']) {
-      doUrl.searchParams.delete(k)
-    }
-
-    if (auth) {
-      doUrl.searchParams.set('userId', auth.userId)
-      if (auth.claims.name) doUrl.searchParams.set('userName', auth.claims.name)
-      if (auth.claims.email) doUrl.searchParams.set('userEmail', auth.claims.email)
-      if (auth.claims.image) doUrl.searchParams.set('userImageUrl', auth.claims.image)
-      if (extraParams) {
-        for (const [k, v] of Object.entries(extraParams(auth))) {
-          doUrl.searchParams.set(k, v)
-        }
-      }
-    }
-
+    const roomRequest = authenticatedRoomRequest(
+      c.req.raw,
+      auth,
+      auth ? await extraIdentity?.(auth, c.env) : undefined,
+    )
     const ns = doNamespace(c.env)
     const stub = ns.get(ns.idFromName(id))
-    return stub.fetch(new Request(doUrl.toString(), c.req.raw))
+    return stub.fetch(roomRequest)
   }
 }
 
@@ -457,138 +491,36 @@ app.get(
   wsRoute((env) => env.RECORD_ROOMS),
 )
 
-type DocsYjsRole = 'admin' | 'member' | 'viewer'
-
-interface DocumentRecordForAccess {
-  ownerId?: string
-  collaborators?: string
-  editors?: string
-}
-
-type DocumentAccessLookup =
-  | { kind: 'found'; doc: DocumentRecordForAccess }
-  | { kind: 'not-docs-room' }
-  | { kind: 'error' }
-
-function parseAccessList(raw: string | undefined): string[] {
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-async function getDocumentForAccess(
-  env: Env,
-  docId: string,
-): Promise<DocumentAccessLookup> {
-  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.APP_NAME}`))
-  try {
-    const res = await stub.fetch(
-      new Request('https://internal/api/tools/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': env.OWNER_USER_ID,
-          'X-App-Action': 'true',
-        },
-        body: JSON.stringify({
-          tool: 'records.get',
-          params: { collection: 'documents', recordId: docId },
-        }),
-      }),
-    )
-    const json = (await res.json()) as {
-      success?: boolean
-      error?: string
-      data?: { record?: { data?: DocumentRecordForAccess } }
-    }
-    if (json.success && json.data?.record?.data) {
-      return { kind: 'found', doc: json.data.record.data }
-    }
-    if (
-      json.error === 'Record not found' ||
-      json.error?.startsWith('Schema not registered for collection: documents')
-    ) {
-      return { kind: 'not-docs-room' }
-    }
-    return { kind: 'error' }
-  } catch {
-    return { kind: 'error' }
-  }
-}
-
-async function resolveDocsYjsRole(
-  env: Env,
-  docId: string,
-  userId: string,
-): Promise<DocsYjsRole | null> {
-  const lookup = await getDocumentForAccess(env, docId)
-  if (lookup.kind === 'not-docs-room') return 'member'
-  if (lookup.kind === 'error') return null
-  const { doc } = lookup
-  if (doc.ownerId === userId || userId === env.OWNER_USER_ID) return 'admin'
-
-  const editors = parseAccessList(doc.editors)
-  if (editors.includes(userId)) return 'member'
-
-  const collaborators = parseAccessList(doc.collaborators)
-  if (collaborators.includes(userId)) return 'viewer'
-
-  return null
-}
-
-app.get('/ws/yjs/:docId', async (c) => {
-  const docId = c.req.param('docId')
-  const url = new URL(c.req.url)
-  const token = url.searchParams.get('token')
-  const auth = token ? (await verifyJwt(jwtConfig(c.env), token)).result : null
-  if (!auth) return new Response('Unauthorized', { status: 401 })
-
-  const role = await resolveDocsYjsRole(c.env, docId, auth.userId)
-  if (!role) return new Response('Forbidden', { status: 403 })
-
-  const doUrl = new URL(c.req.url)
-  doUrl.searchParams.set('userId', auth.userId)
-  doUrl.searchParams.set('role', role)
-  doUrl.searchParams.delete('token')
-
-  const stub = c.env.YJS_ROOMS.get(c.env.YJS_ROOMS.idFromName(docId))
-  return stub.fetch(new Request(doUrl.toString(), c.req.raw))
-})
+app.get(
+  '/ws/yjs/:docId',
+  wsRoute(
+    (env) => env.YJS_ROOMS,
+    async (auth, env) => ({ role: await resolveAppRole(env, auth.userId) }),
+  ),
+)
 
 app.get(
   '/ws/canvas/:docId',
   wsRoute(
     (env) => env.CANVAS_ROOMS,
-    () => ({ role: 'member' }),
+    async (auth, env) => ({ role: await resolveAppRole(env, auth.userId) }),
   ),
 )
 
-app.get(
-  '/ws/presence/:scopeId',
-  wsRoute(
-    (env) => env.PRESENCE_ROOMS,
-    (auth) => ({
-      ...(auth.claims.name ? { userName: auth.claims.name } : {}),
-      ...(auth.claims.email ? { userEmail: auth.claims.email } : {}),
-      ...(auth.claims.image ? { userImageUrl: auth.claims.image } : {}),
-    }),
-  ),
-)
+// Presence forwards no extra identity: name / email / avatar ride along as
+// verified headers set by authenticatedRoomRequest(), and PresencePeer no
+// longer carries email or avatar at all.
+app.get('/ws/presence/:scopeId', wsRoute((env) => env.PRESENCE_ROOMS))
 
 app.get(
   '/ws/cron/:roomId',
   wsRoute(
     (env) => env.CRON_ROOMS,
-    // Authenticated users get write access (trigger / pause / resume).
-    // Anonymous connections fall through with no role and become viewers,
-    // which CronRoom enforces as read-only. Apps that want stricter access
-    // (e.g. owner-only) should replace this with an inline handler that
-    // resolves role from app state — see the /ws/yjs route for the pattern.
-    () => ({ role: 'member' }),
+    // Cron write access (trigger / pause / resume) runs tasks on the owner's
+    // budget, so it follows the user's real role rather than a constant: the
+    // owner and explicit members get write, anyone demoted to viewer and every
+    // anonymous connection is read-only, which CronRoom enforces.
+    async (auth, env) => ({ role: await resolveAppRole(env, auth.userId) }),
   ),
 )
 
@@ -754,7 +686,12 @@ app.get('*', async (c) => {
   const response = await c.env.ASSETS.fetch(c.req.raw)
   if (response.status === 404) {
     const url = new URL(c.req.url)
-    url.pathname = '/index.html'
+    // A FILE, not a client route: a miss must 404. Returning the shell here
+    // is HTML parsed as JavaScript, which is a blank page.
+    if (url.pathname.slice(url.pathname.lastIndexOf('/') + 1).includes('.')) {
+      return c.json({ error: 'not_found' }, 404)
+    }
+    url.pathname = '/'
     return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw))
   }
   return response

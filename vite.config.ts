@@ -1,8 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import generouted from '@generouted/react-router/plugin'
 import { cloudflare } from '@cloudflare/vite-plugin'
 import checker from 'vite-plugin-checker'
+import { deepspaceBuild } from 'deepspace/build'
 
 export default defineConfig({
   plugins: [
@@ -20,10 +22,15 @@ export default defineConfig({
         useFlatConfig: true,
       },
     }),
+    // Owns the build-time wiring the SDK is entitled to change under us: it
+    // deletes the preview `.dev.vars` the Cloudflare plugin drops beside the
+    // built worker (a second plaintext copy of every secret, left in dist/ by a
+    // bare `vite build`), supplies the client `dedupe` list that used to be
+    // hand-maintained here, and stamps the app id from wrangler.toml. Adopting
+    // it is the fix `deepspace app update` asks for; see
+    // docs/migrations/build-preview-secrets.md.
+    deepspaceBuild({ appDir: fileURLToPath(new URL('.', import.meta.url)) }),
   ],
-  resolve: {
-    dedupe: ['react', 'react-dom', 'better-auth'],
-  },
   optimizeDeps: {
     // generouted loads routes via `import.meta.glob`, which Vite's esbuild dep-scanner
     // does not evaluate — so every dep reachable only through the page tree (UI libs,

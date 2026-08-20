@@ -1,12 +1,19 @@
 name = "evenly"
-compatibility_date = "2025-01-01"
-compatibility_flags = ["nodejs_compat"]
+# Honored since SDK 0.15.0 (it was silently discarded before, so the deployed
+# worker has effectively been running on a modern runtime already). Pinned to the
+# release date of the workerd this repo installs (1.20260625.1) so local dev, the
+# test runtime and the deploy agree.
+compatibility_date = "2026-06-25"
+# assets_navigation_has_no_effect is required by the SDK (REQUIRED_COMPATIBILITY_FLAGS
+# in deepspace/worker) and is what makes not_found_handling = "none" below actually
+# hand navigation requests to the worker instead of the asset layer.
+compatibility_flags = ["nodejs_compat", "assets_navigation_has_no_effect"]
 main = "worker.ts"
 
 [assets]
 directory = "dist"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
+not_found_handling = "none"
 run_worker_first = ["/api/*", "/ws/*", "/internal/*", "/v1/*", "/_deepspace/*"]
 
 [[migrations]]
