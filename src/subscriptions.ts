@@ -1,27 +1,17 @@
 /**
  * Subscription plan declarations.
  *
- * Edit this file then `deepspace deploy` to sync the plans to Stripe Products
- * and Prices. Keep `slug` stable — subscribers and tier checks refer to it.
+ * Evenly is free and open-source with no paid plans, so this list is empty and
+ * `deepspace deploy` syncs zero plans to Stripe. The scaffold's placeholder
+ * "Pro" tier ($9/mo, $90/yr) was never wired to any UI and is removed rather
+ * than left to sync a product nobody can buy.
  *
- * Minimum prices: $3/month, $12/year — below this Stripe's per-transaction
- * fee ($0.30 + 2.9%) eats most of the charge, so the developer would receive
- * almost nothing per payout. Free plans don't hit Stripe at all.
+ * To add a plan later: each entry needs a stable `slug`, a `name`, and
+ * `priceCents` (free plans use 0 and never hit Stripe).
  */
 
-export const subscriptionPlans = [
-  {
-    slug: 'free',
-    name: 'Free',
-    priceCents: 0,
-  },
-  {
-    slug: 'pro',
-    name: 'Pro',
-    priceCents: 900,        // $9/month
-    yearlyCents: 9000,         // optional — $90/year (drop for month-only)
-    taxCode: 'txcd_10000000',  // optional — defaults to this (digital services)
-  },
-] as const
+export const subscriptionPlans = [] as const
 
-export type SubscriptionPlanSlug = (typeof subscriptionPlans)[number]['slug']
+export type SubscriptionPlanSlug = (typeof subscriptionPlans)[number] extends never
+  ? string
+  : (typeof subscriptionPlans)[number]['slug']
